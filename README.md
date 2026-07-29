@@ -38,9 +38,31 @@ let bezier = BezierString::from_line_string(line, 0.1).unwrap();
 let approx_line = bezier.to_line_string(0.1).unwrap();
 ```
 
+`to_line_string` borrows the Bézier geometry, so it can be flattened repeatedly
+without cloning it. Use `to_line_string_with_segment_ends` when the flattened
+coordinates must remain associated with their original Bézier segments:
+
+```rust
+# use geo_types::{Coord, LineString};
+# use linestring2bezier::BezierString;
+# let line = LineString(vec![
+#     Coord { x: 0.0, y: 0.0 },
+#     Coord { x: 1.0, y: 2.0 },
+#     Coord { x: 2.0, y: 0.0 },
+# ]);
+# let bezier = BezierString::from_line_string(line, 0.1).unwrap();
+let (approx_line, segment_end_indices) =
+    bezier.to_line_string_with_segment_ends(0.1).unwrap();
+```
+
+Each segment-end index identifies that segment's final coordinate in the
+returned `LineString`. Empty Bézier strings produce an empty `LineString`.
+
 ## Error Handling
 
-- Returns errors if the error margin is too small or if the input is empty.
+- Returns errors if the error margin is too small, if a `LineString` has fewer
+  than two coordinates when fitting a Bézier string, or if a Bézier string has
+  disconnected segments when flattening.
 
 ## Documentation
 

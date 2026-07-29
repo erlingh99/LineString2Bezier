@@ -47,11 +47,17 @@ pub enum Error {
     #[error("The given error margin is too small")]
     TooSmallErrorGiven,
     /// Tried to convert an empty [BezierString] to [LineString]
+    ///
+    /// This variant is retained for API compatibility. Converting an empty
+    /// [BezierString] now returns an empty [LineString].
     #[error("An empty BezierString cannot be made into a LineString")]
     EmptyBezierString,
     /// Tried to convert an empty [LineString] to [BezierString]
     #[error("An empty LineString cannot be made into a BezierString")]
     EmptyLineString,
+    /// Tried to flatten a [BezierString] whose segments are not connected
+    #[error("A BezierString with disconnected segments cannot be made into a LineString")]
+    DiscontinuousBezierString,
 }
 
 /// Simple struct to represent a cubic bezier curve
@@ -93,14 +99,14 @@ impl<T: CoordFloat> BezierCurve<T> {
         [self.start, self.handle1, self.handle2, self.end]
     }
 
-    /// Approximate this cubic bezier with a LineString with a max error of `error``
-    pub fn to_line_string(self, error: T) -> Result<LineString<T>> {
+    /// Approximate this cubic bezier with a LineString with a max error of `error`
+    pub fn to_line_string(&self, error: T) -> Result<LineString<T>> {
         if error <= T::epsilon() * (T::one() + T::one()) {
             return Err(Error::TooSmallErrorGiven);
         }
 
         let mut coords = vec![self.start];
-        let mut stack = vec![self];
+        let mut stack = vec![self.clone()];
 
         while let Some(curve) = stack.pop() {
             if curve.max_distance_to_chord() <= error {
@@ -162,6 +168,22 @@ impl<T: CoordFloat> BezierSegment<T> {
         matches!(self, BezierSegment::Bezier(_))
     }
 
+    /// Return the start coordinate of this segment
+    pub fn start(&self) -> Coord<T> {
+        match self {
+            BezierSegment::Bezier(curve) => curve.start,
+            BezierSegment::Line(line) => line.start,
+        }
+    }
+
+    /// Return the end coordinate of this segment
+    pub fn end(&self) -> Coord<T> {
+        match self {
+            BezierSegment::Bezier(curve) => curve.end,
+            BezierSegment::Line(line) => line.end,
+        }
+    }
+
     /// Construct a Bezier segment given the start, end and optionally two handles
     pub fn new(start: Coord<T>, handles: Option<(Coord<T>, Coord<T>)>, end: Coord<T>) -> Self {
         if let Some((handle1, handle2)) = handles {
@@ -194,11 +216,10 @@ impl<T: CoordFloat> BezierSegment<T> {
         }
     }
 
-    /// Get a LineString with at most error deviation from the Bezier segment
-    /// The deviation is measured at the mid point between neighboring nodes
-    pub fn to_line_string(self, error: T) -> Result<LineString<T>> {
+    /// Get a LineString with at most `error` deviation from the Bezier segment
+    pub fn to_line_string(&self, error: T) -> Result<LineString<T>> {
         match self {
-            BezierSegment::Line(line) => Ok(LineString::from(line)),
+            BezierSegment::Line(line) => Ok(LineString(vec![line.start, line.end])),
             BezierSegment::Bezier(bc) => bc.to_line_string(error),
         }
     }
@@ -279,6 +300,10 @@ impl<T: CoordFloat> BezierString<T> {
     /// The number of vertices and handles in this [BezierString]
     /// The endpoints of each [BezierSegment] are not counted double
     pub fn num_points(&self) -> usize {
+        if self.0.is_empty() {
+            return 0;
+        }
+
         let mut num_points = 0;
 
         for segment in self.0.iter() {
@@ -308,22 +333,54 @@ impl<T: CoordFloat> BezierString<T> {
             .fold(T::zero(), |acc, e| acc + e.length_approximation())
     }
 
-    /// Convert a [BezierString] to a [LineString] with a maximum of `error` deviation between the two
-    pub fn to_line_string(self, error: T) -> Result<LineString<T>> {
-        let mut line = LineString::new(Vec::with_capacity(self.num_points()));
+    /// Convert this [BezierString] to a [LineString] with a maximum of `error`
+    /// deviation between the two
+    ///
+    /// Returns an empty [LineString] when this string has no segments. Returns
+    /// [Error::DiscontinuousBezierString] rather than silently joining segments
+    /// whose adjacent endpoints differ.
+    pub fn to_line_string(&self, error: T) -> Result<LineString<T>> {
+        self.to_line_string_with_segment_ends(error)
+            .map(|(line_string, _)| line_string)
+    }
 
-        let mut segments = self.0.into_iter();
-        {
-            let first_segment = segments.next().ok_or(Error::EmptyBezierString)?;
-            let iter = first_segment.to_line_string(error)?.0.into_iter();
-            line.0.extend(iter);
-        }
+    /// Convert this [BezierString] to a [LineString] and retain segment boundaries
+    ///
+    /// The second item contains the index in the returned [LineString] of each
+    /// segment's end coordinate. It has one entry per segment. A segment's start
+    /// index is zero for the first segment and the previous entry thereafter.
+    ///
+    /// Returns an empty [LineString] and an empty index vector when this string
+    /// has no segments. Returns [Error::DiscontinuousBezierString] rather than
+    /// silently joining segments whose adjacent endpoints differ.
+    pub fn to_line_string_with_segment_ends(
+        &self,
+        error: T,
+    ) -> Result<(LineString<T>, Vec<usize>)> {
+        let mut line = LineString::new(Vec::with_capacity(self.num_points()));
+        let mut segment_end_indices = Vec::with_capacity(self.num_segments());
+
+        let mut segments = self.0.iter();
+        let Some(first_segment) = segments.next() else {
+            return Ok((line, segment_end_indices));
+        };
+
+        line.0.extend(first_segment.to_line_string(error)?.0);
+        segment_end_indices.push(line.0.len() - 1);
+        let mut previous_end = first_segment.end();
+
         for segment in segments {
+            if segment.start() != previous_end {
+                return Err(Error::DiscontinuousBezierString);
+            }
+
             let iter = segment.to_line_string(error)?.0.into_iter();
             line.0.extend(iter.skip(1));
+            segment_end_indices.push(line.0.len() - 1);
+            previous_end = segment.end();
         }
 
-        Ok(line)
+        Ok((line, segment_end_indices))
     }
 
     /// Convert a [LineString] to a [BezierString] with a maximum of `error` deviation between the two at the line_string vertices
@@ -825,7 +882,7 @@ impl<T: CoordFloat> VectorTraits<T> for Coord<T> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{BezierCurve, BezierSegment, BezierString};
+    use crate::{BezierCurve, BezierSegment, BezierString, Error};
     use geo::{Distance, Euclidean};
     use geo_types::{Coord, LineString, coord, line_string};
 
@@ -1015,10 +1072,7 @@ mod tests {
             BezierSegment::Bezier(bezier_curve) => bezier_curve,
             BezierSegment::Line(_) => panic!("We want to test the bezier not line"),
         };
-        let line_string = curve
-            .clone()
-            .to_line_string(0.1)
-            .expect("Approximation failed");
+        let line_string = curve.to_line_string(0.1).expect("Approximation failed");
 
         let max_dist = actual_max_dist_between_bezier_and_line_string(&curve, &line_string, 1);
         println!("{:?}", max_dist);
@@ -1036,10 +1090,7 @@ mod tests {
         };
 
         let error = 1.;
-        let line_string = curve
-            .clone()
-            .to_line_string(error)
-            .expect("Approximation failed");
+        let line_string = curve.to_line_string(error).expect("Approximation failed");
 
         let max_dist = actual_max_dist_between_bezier_and_line_string(&curve, &line_string, 1000);
 
@@ -1084,10 +1135,7 @@ mod tests {
     #[test]
     fn bezier_string_to_line_string_f64() {
         let curve = bezier_string_f64();
-        let line_string = curve
-            .clone()
-            .to_line_string(0.1)
-            .expect("Approximation failed");
+        let line_string = curve.to_line_string(0.1).expect("Approximation failed");
 
         let mut max_error = 0.;
         for segment in curve.0.iter() {
@@ -1110,6 +1158,65 @@ mod tests {
         debug_print_bezier_string(&curve);
         debug_print_line_string(&line_string);
         assert!(max_error < 0.1);
+    }
+
+    #[test]
+    fn empty_bezier_string_flattens_to_empty_line_string() {
+        let bezier_string = BezierString::<f64>::empty();
+
+        let (line_string, segment_end_indices) = bezier_string
+            .to_line_string_with_segment_ends(0.1)
+            .expect("An empty BezierString is valid");
+
+        assert!(line_string.0.is_empty());
+        assert!(segment_end_indices.is_empty());
+        assert_eq!(bezier_string.num_points(), 0);
+        assert_eq!(bezier_string.num_segments(), 0);
+
+        let line_string = bezier_string
+            .to_line_string(0.1)
+            .expect("Flattening borrows the BezierString");
+        assert!(line_string.0.is_empty());
+    }
+
+    #[test]
+    fn bezier_string_flattening_retains_segment_end_indices() {
+        let bezier_string = BezierString::new(vec![
+            BezierSegment::Bezier(BezierCurve::new(
+                coord! { x: 0., y: 0. },
+                coord! { x: 0., y: 1. },
+                coord! { x: 1., y: 1. },
+                coord! { x: 1., y: 0. },
+            )),
+            BezierSegment::new(coord! { x: 1., y: 0. }, None, coord! { x: 2., y: 0. }),
+        ]);
+
+        let (line_string, segment_end_indices) = bezier_string
+            .to_line_string_with_segment_ends(0.1)
+            .expect("The segments are connected");
+
+        assert_eq!(segment_end_indices.len(), bezier_string.num_segments());
+        assert_eq!(
+            line_string.0[segment_end_indices[0]],
+            coord! { x: 1., y: 0. }
+        );
+        assert_eq!(segment_end_indices[1], line_string.0.len() - 1);
+        assert_eq!(
+            line_string.0[segment_end_indices[1]],
+            coord! { x: 2., y: 0. }
+        );
+    }
+
+    #[test]
+    fn disconnected_bezier_string_is_not_silently_joined() {
+        let bezier_string = BezierString::new(vec![
+            BezierSegment::new(coord! { x: 0., y: 0. }, None, coord! { x: 1., y: 0. }),
+            BezierSegment::new(coord! { x: 2., y: 0. }, None, coord! { x: 3., y: 0. }),
+        ]);
+
+        let result = bezier_string.to_line_string(0.1);
+
+        assert!(matches!(result, Err(Error::DiscontinuousBezierString)));
     }
 
     #[test]
