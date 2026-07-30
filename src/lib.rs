@@ -184,6 +184,14 @@ impl<T: CoordFloat> BezierSegment<T> {
         }
     }
 
+    /// Return the handles of this segment, or [None] if this segment is a line
+    pub fn handles(&self) -> Option<(Coord<T>, Coord<T>)> {
+        match self {
+            BezierSegment::Bezier(curve) => Some((curve.handle1, curve.handle2)),
+            BezierSegment::Line(_) => None,
+        }
+    }
+
     /// Construct a Bezier segment given the start, end and optionally two handles
     pub fn new(start: Coord<T>, handles: Option<(Coord<T>, Coord<T>)>, end: Coord<T>) -> Self {
         if let Some((handle1, handle2)) = handles {
@@ -1078,6 +1086,21 @@ mod tests {
         println!("{:?}", max_dist);
 
         assert!(max_dist < 0.1);
+    }
+
+    #[test]
+    fn bezier_segment_handles() {
+        let handle1 = coord! { x: 1., y: 2. };
+        let handle2 = coord! { x: 3., y: 4. };
+        let bezier = BezierSegment::new(
+            coord! { x: 0., y: 0. },
+            Some((handle1, handle2)),
+            coord! { x: 5., y: 6. },
+        );
+        let line = BezierSegment::new(coord! { x: 0., y: 0. }, None, coord! { x: 5., y: 6. });
+
+        assert_eq!(bezier.handles(), Some((handle1, handle2)));
+        assert_eq!(line.handles(), None);
     }
 
     #[test]
