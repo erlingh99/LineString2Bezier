@@ -308,6 +308,30 @@ impl<T: CoordFloat> BezierString<T> {
         self.0.len()
     }
 
+    /// Is this [`BezierString`] empty?
+    pub fn is_empty(&self) -> bool {
+        self.num_segments() == 0
+    }
+
+    /// If this [`BezierString`] is not closed, close it with a straight line segment
+    pub fn close(&mut self) {
+        if !self.is_closed() {
+            self.0.push(BezierSegment::Line(Line {
+                start: self.0[self.0.len() - 1].end(),
+                end: self.0[0].start(),
+            }));
+        }
+    }
+
+    /// Check if the [`BezierString`] is closed, i.e. first and last coord is the same or it is empty.
+    pub fn is_closed(&self) -> bool {
+        if self.is_empty() {
+            true
+        } else {
+            self.0[0].start() == self.0[self.0.len() - 1].end()
+        }
+    }
+
     /// Return the coordinates of a [`BezierString`] as a Vec of [`BezierSegment`]s
     pub fn into_inner(self) -> Vec<BezierSegment<T>> {
         self.0
