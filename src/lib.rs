@@ -1,40 +1,9 @@
-//! Approximate a [LineString] with a cubic bezier spline [BezierString]
-//! or approximate a [BezierString] with a [LineString]
+//! Approximate a [`LineString`] with a cubic bezier spline [`BezierString`]
+//! or approximate a [`BezierString`] with a [`LineString`]
 //!
-//! Pass the line_string and a maximum allowed error to [BezierString::from_line_string]
-//! The error is the maximum distance between the line_string and the bezier spline
-//! evaluated at the line_string vertices and bezier perpendicular distance extremes
-
-#![deny(
-    elided_lifetimes_in_paths,
-    explicit_outlives_requirements,
-    keyword_idents,
-    macro_use_extern_crate,
-    meta_variable_misuse,
-    missing_abi,
-    missing_debug_implementations,
-    missing_docs,
-    non_ascii_idents,
-    noop_method_call,
-    rust_2021_incompatible_closure_captures,
-    rust_2021_incompatible_or_patterns,
-    rust_2021_prefixes_incompatible_syntax,
-    rust_2024_prelude_collisions,
-    single_use_lifetimes,
-    trivial_casts,
-    trivial_numeric_casts,
-    unreachable_pub,
-    unsafe_code,
-    unsafe_op_in_unsafe_fn,
-    unused_crate_dependencies,
-    unused_extern_crates,
-    unused_import_braces,
-    unused_lifetimes,
-    unused_qualifications,
-    unused_results,
-    clippy::unwrap_used,
-    warnings
-)]
+//! Pass the `line_string` and a maximum allowed error to [`BezierString::from_line_string`]
+//! The error is the maximum distance between the `line_string` and the bezier spline
+//! evaluated at the `line_string` vertices and bezier perpendicular distance extremes
 
 use geo_types::{Coord, CoordFloat, Line, LineString};
 
@@ -46,16 +15,16 @@ pub enum Error {
     /// The given error margin is too small
     #[error("The given error margin is too small")]
     TooSmallErrorGiven,
-    /// Tried to convert an empty [BezierString] to [LineString]
+    /// Tried to convert an empty [`BezierString`] to [`LineString`]
     ///
     /// This variant is retained for API compatibility. Converting an empty
-    /// [BezierString] now returns an empty [LineString].
+    /// [`BezierString`] now returns an empty [`LineString`].
     #[error("An empty BezierString cannot be made into a LineString")]
     EmptyBezierString,
-    /// Tried to convert an empty [LineString] to [BezierString]
+    /// Tried to convert an empty [`LineString`] to [`BezierString`]
     #[error("An empty LineString cannot be made into a BezierString")]
     EmptyLineString,
-    /// Tried to flatten a [BezierString] whose segments are not connected
+    /// Tried to flatten a [`BezierString`] whose segments are not connected
     #[error("A BezierString with disconnected segments cannot be made into a LineString")]
     DiscontinuousBezierString,
 }
@@ -74,9 +43,9 @@ pub struct BezierCurve<T: CoordFloat = f64> {
 }
 
 impl<T: CoordFloat> BezierCurve<T> {
-    /// Returns a new [BezierCurve]
+    /// Returns a new [`BezierCurve`]
     pub fn new(start: Coord<T>, handle1: Coord<T>, handle2: Coord<T>, end: Coord<T>) -> Self {
-        BezierCurve {
+        Self {
             start,
             handle1,
             handle2,
@@ -84,9 +53,9 @@ impl<T: CoordFloat> BezierCurve<T> {
         }
     }
 
-    /// Returns a new [BezierCurve] with all fields set to [Coord::zero]
+    /// Returns a new [`BezierCurve`] with all fields set to [`Coord::zero`]
     pub fn zero() -> Self {
-        BezierCurve {
+        Self {
             start: Coord::zero(),
             handle1: Coord::zero(),
             handle2: Coord::zero(),
@@ -99,7 +68,12 @@ impl<T: CoordFloat> BezierCurve<T> {
         [self.start, self.handle1, self.handle2, self.end]
     }
 
-    /// Approximate this cubic bezier with a LineString with a max error of `error`
+    /// Approximate this cubic bezier with a `LineString` with a max error of `error`
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::TooSmallErrorGiven`] when `error` is too small for a
+    /// meaningful approximation.
     pub fn to_line_string(&self, error: T) -> Result<LineString<T>> {
         if error <= T::epsilon() * (T::one() + T::one()) {
             return Err(Error::TooSmallErrorGiven);
@@ -131,13 +105,13 @@ impl<T: CoordFloat> BezierCurve<T> {
         let p0123 = (p012 + p123) / two;
 
         (
-            BezierCurve {
+            Self {
                 start: self.start,
                 handle1: p01,
                 handle2: p012,
                 end: p0123,
             },
-            BezierCurve {
+            Self {
                 start: p0123,
                 handle1: p123,
                 handle2: p23,
@@ -153,7 +127,7 @@ impl<T: CoordFloat> BezierCurve<T> {
     }
 }
 
-/// A BezierSegment is either a straight [Line] or a [BezierCurve]
+/// A `BezierSegment` is either a straight [Line] or a [`BezierCurve`]
 #[derive(Debug, Clone)]
 pub enum BezierSegment<T: CoordFloat = f64> {
     /// The segment is a cubic bezier
@@ -165,44 +139,44 @@ pub enum BezierSegment<T: CoordFloat = f64> {
 impl<T: CoordFloat> BezierSegment<T> {
     /// Is this segment a cubic bezier?
     pub fn is_bezier_curve(&self) -> bool {
-        matches!(self, BezierSegment::Bezier(_))
+        matches!(self, Self::Bezier(_))
     }
 
     /// Return the start coordinate of this segment
     pub fn start(&self) -> Coord<T> {
         match self {
-            BezierSegment::Bezier(curve) => curve.start,
-            BezierSegment::Line(line) => line.start,
+            Self::Bezier(curve) => curve.start,
+            Self::Line(line) => line.start,
         }
     }
 
     /// Return the end coordinate of this segment
     pub fn end(&self) -> Coord<T> {
         match self {
-            BezierSegment::Bezier(curve) => curve.end,
-            BezierSegment::Line(line) => line.end,
+            Self::Bezier(curve) => curve.end,
+            Self::Line(line) => line.end,
         }
     }
 
     /// Return the handles of this segment, or [None] if this segment is a line
     pub fn handles(&self) -> Option<(Coord<T>, Coord<T>)> {
         match self {
-            BezierSegment::Bezier(curve) => Some((curve.handle1, curve.handle2)),
-            BezierSegment::Line(_) => None,
+            Self::Bezier(curve) => Some((curve.handle1, curve.handle2)),
+            Self::Line(_) => None,
         }
     }
 
     /// Construct a Bezier segment given the start, end and optionally two handles
     pub fn new(start: Coord<T>, handles: Option<(Coord<T>, Coord<T>)>, end: Coord<T>) -> Self {
         if let Some((handle1, handle2)) = handles {
-            BezierSegment::Bezier(BezierCurve {
+            Self::Bezier(BezierCurve {
                 start,
                 handle1,
                 handle2,
                 end,
             })
         } else {
-            BezierSegment::Line(Line::new(start, end))
+            Self::Line(Line::new(start, end))
         }
     }
 
@@ -213,22 +187,27 @@ impl<T: CoordFloat> BezierSegment<T> {
     /// For the line it is simple the euclidean line length
     pub fn length_approximation(&self) -> T {
         match self {
-            BezierSegment::Bezier(bc) => {
+            Self::Bezier(bc) => {
                 ((bc.end - bc.handle2).magnitude()
                     + (bc.handle2 - bc.handle1).magnitude()
                     + (bc.handle1 - bc.start).magnitude()
                     + (bc.end - bc.start).magnitude())
                     / (T::one() + T::one())
             }
-            BezierSegment::Line(line) => line.delta().magnitude(),
+            Self::Line(line) => line.delta().magnitude(),
         }
     }
 
-    /// Get a LineString with at most `error` deviation from the Bezier segment
+    /// Get a `LineString` with at most `error` deviation from the Bezier segment
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::TooSmallErrorGiven`] when this is a Bezier curve and
+    /// `error` is too small for a meaningful approximation.
     pub fn to_line_string(&self, error: T) -> Result<LineString<T>> {
         match self {
-            BezierSegment::Line(line) => Ok(LineString(vec![line.start, line.end])),
-            BezierSegment::Bezier(bc) => bc.to_line_string(error),
+            Self::Line(line) => Ok(LineString(vec![line.start, line.end])),
+            Self::Bezier(bc) => bc.to_line_string(error),
         }
     }
 }
@@ -238,7 +217,7 @@ where
     T: CoordFloat,
 {
     fn from(value: [Coord<T>; 4]) -> Self {
-        BezierSegment::Bezier(BezierCurve {
+        Self::Bezier(BezierCurve {
             start: value[0],
             handle1: value[1],
             handle2: value[2],
@@ -252,7 +231,7 @@ where
     T: CoordFloat,
 {
     fn from(value: [Coord<T>; 2]) -> Self {
-        BezierSegment::Line(Line {
+        Self::Line(Line {
             start: value[0],
             end: value[1],
         })
@@ -280,19 +259,19 @@ fn bezier_basis_3<T: CoordFloat>(t: T) -> T {
     t.powi(3)
 }
 
-/// A BezierString is simply a vector of [BezierSegment]s
+/// A `BezierString` is simply a vector of [`BezierSegment`]s
 #[derive(Debug, Clone)]
 pub struct BezierString<T: CoordFloat = f64>(pub Vec<BezierSegment<T>>);
 
 impl<T: CoordFloat> BezierString<T> {
-    /// Returns a [BezierString] with the given segments
+    /// Returns a [`BezierString`] with the given segments
     pub fn new(segments: Vec<BezierSegment<T>>) -> Self {
-        BezierString(segments)
+        Self(segments)
     }
 
-    /// Returns an empty [BezierString]
+    /// Returns an empty [`BezierString`]
     pub fn empty() -> Self {
-        BezierString(Vec::new())
+        Self(Vec::new())
     }
 
     /// Return an iterator yielding the segments
@@ -305,8 +284,8 @@ impl<T: CoordFloat> BezierString<T> {
         self.0.iter_mut()
     }
 
-    /// The number of vertices and handles in this [BezierString]
-    /// The endpoints of each [BezierSegment] are not counted double
+    /// The number of vertices and handles in this [`BezierString`]
+    /// The endpoints of each [`BezierSegment`] are not counted double
     pub fn num_points(&self) -> usize {
         if self.0.is_empty() {
             return 0;
@@ -314,7 +293,7 @@ impl<T: CoordFloat> BezierString<T> {
 
         let mut num_points = 0;
 
-        for segment in self.0.iter() {
+        for segment in &self.0 {
             if segment.is_bezier_curve() {
                 num_points += 3;
             } else {
@@ -324,43 +303,55 @@ impl<T: CoordFloat> BezierString<T> {
         num_points + 1
     }
 
-    /// Get the number of segments that make up this [BezierString]
+    /// Get the number of segments that make up this [`BezierString`]
     pub fn num_segments(&self) -> usize {
         self.0.len()
     }
 
-    /// Return the coordinates of a [BezierString] as a Vec of [BezierSegment]s
+    /// Return the coordinates of a [`BezierString`] as a Vec of [`BezierSegment`]s
     pub fn into_inner(self) -> Vec<BezierSegment<T>> {
         self.0
     }
 
-    /// Get a length approximation of the [BezierString]
+    /// Get a length approximation of the [`BezierString`]
     pub fn length_approximation(&self) -> T {
         self.0
             .iter()
             .fold(T::zero(), |acc, e| acc + e.length_approximation())
     }
 
-    /// Convert this [BezierString] to a [LineString] with a maximum of `error`
+    /// Convert this [`BezierString`] to a [`LineString`] with a maximum of `error`
     /// deviation between the two
     ///
-    /// Returns an empty [LineString] when this string has no segments. Returns
-    /// [Error::DiscontinuousBezierString] rather than silently joining segments
+    /// Returns an empty [`LineString`] when this string has no segments. Returns
+    /// [`Error::DiscontinuousBezierString`] rather than silently joining segments
     /// whose adjacent endpoints differ.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::TooSmallErrorGiven`] when `error` is too small for a
+    /// meaningful approximation, or [`Error::DiscontinuousBezierString`] when
+    /// adjacent segment endpoints differ.
     pub fn to_line_string(&self, error: T) -> Result<LineString<T>> {
         self.to_line_string_with_segment_ends(error)
             .map(|(line_string, _)| line_string)
     }
 
-    /// Convert this [BezierString] to a [LineString] and retain segment boundaries
+    /// Convert this [`BezierString`] to a [`LineString`] and retain segment boundaries
     ///
-    /// The second item contains the index in the returned [LineString] of each
+    /// The second item contains the index in the returned [`LineString`] of each
     /// segment's end coordinate. It has one entry per segment. A segment's start
     /// index is zero for the first segment and the previous entry thereafter.
     ///
-    /// Returns an empty [LineString] and an empty index vector when this string
-    /// has no segments. Returns [Error::DiscontinuousBezierString] rather than
+    /// Returns an empty [`LineString`] and an empty index vector when this string
+    /// has no segments. Returns [`Error::DiscontinuousBezierString`] rather than
     /// silently joining segments whose adjacent endpoints differ.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::TooSmallErrorGiven`] when `error` is too small for a
+    /// meaningful approximation, or [`Error::DiscontinuousBezierString`] when
+    /// adjacent segment endpoints differ.
     pub fn to_line_string_with_segment_ends(
         &self,
         error: T,
@@ -391,8 +382,14 @@ impl<T: CoordFloat> BezierString<T> {
         Ok((line, segment_end_indices))
     }
 
-    /// Convert a [LineString] to a [BezierString] with a maximum of `error` deviation between the two at the line_string vertices
-    pub fn from_line_string(line_string: LineString<T>, error: T) -> Result<BezierString<T>> {
+    /// Convert a [`LineString`] to a [`BezierString`] with a maximum of `error` deviation between the two at the `line_string` vertices
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::TooSmallErrorGiven`] when `error` is too small for a
+    /// meaningful approximation, or [`Error::EmptyLineString`] when the input
+    /// contains fewer than two coordinates.
+    pub fn from_line_string(line_string: LineString<T>, error: T) -> Result<Self> {
         if error <= T::epsilon() * (T::one() + T::one()) {
             return Err(Error::TooSmallErrorGiven);
         }
@@ -409,13 +406,13 @@ impl<T: CoordFloat> BezierString<T> {
                 prev_coord = p;
             }
 
-            return Ok(BezierString(segments));
+            return Ok(Self(segments));
         }
 
         let mut tangent_right =
-            compute_right_tangent(line_string.0.as_slice(), 0).unwrap_or(Coord::zero());
-        let mut tangent_left =
-            compute_left_tangent(line_string.0.as_slice(), n_pts - 1).unwrap_or(Coord::zero());
+            compute_right_tangent(line_string.0.as_slice(), 0).unwrap_or_else(|| Coord::zero());
+        let mut tangent_left = compute_left_tangent(line_string.0.as_slice(), n_pts - 1)
+            .unwrap_or_else(|| Coord::zero());
 
         if line_string.is_closed() {
             let diff = tangent_right - tangent_left;
@@ -437,7 +434,7 @@ impl<T: CoordFloat> BezierString<T> {
             error,
             &mut bezier_segments,
         );
-        Ok(BezierString(bezier_segments))
+        Ok(Self(bezier_segments))
     }
 }
 
@@ -487,27 +484,26 @@ fn fit_cubic<T: CoordFloat>(
     }
 
     // Fitting failed, split at the point of max error and fit each part recursively
-    let tangent_center = match compute_center_tangent(polyline, split_point) {
-        Some(t) => t,
-        None => {
-            let rt = compute_right_tangent(polyline, split_point);
-            let lt = compute_left_tangent(polyline, split_point);
+    let tangent_center = if let Some(t) = compute_center_tangent(polyline, split_point) {
+        t
+    } else {
+        let rt = compute_right_tangent(polyline, split_point);
+        let lt = compute_left_tangent(polyline, split_point);
 
-            // computing the center tangent failed => the point before and after the split point is the same
-            // or some infinite coords are encountered
-            // lets assign a tangent perpendicular to rt and lt if they are non-zero
-            // otherwise we have three identical points in a row and might as well assign zero to the tangent
-            if let Some(rt) = rt
-                && let Some(lt) = lt
-            {
-                // rt and lt must be equal
-                (rt + lt)
-                    .try_normalize()
-                    .map(|c| Coord { x: -c.y, y: c.x })
-                    .unwrap_or(Coord::zero())
-            } else {
-                Coord::zero()
-            }
+        // computing the center tangent failed => the point before and after the split point is the same
+        // or some infinite coords are encountered
+        // lets assign a tangent perpendicular to rt and lt if they are non-zero
+        // otherwise we have three identical points in a row and might as well assign zero to the tangent
+        if let Some(rt) = rt
+            && let Some(lt) = lt
+        {
+            // rt and lt must be equal
+            (rt + lt)
+                .try_normalize()
+                .map(|c| Coord { x: -c.y, y: c.x })
+                .unwrap_or_else(|| Coord::zero())
+        } else {
+            Coord::zero()
         }
     };
 
@@ -587,7 +583,7 @@ fn generate_bezier<T: CoordFloat>(
 
     // If alpha negative, use the Wu/Barsky heuristic
     let seg_length = (polyline[last] - polyline[first]).magnitude();
-    #[allow(clippy::unwrap_used)]
+    #[expect(clippy::unwrap_used)]
     let epsilon = T::from(1.0e-6).unwrap() * seg_length;
     if alpha_l < epsilon || alpha_r < epsilon {
         let dist = seg_length / (T::one() + T::one() + T::one());
@@ -634,7 +630,7 @@ fn chord_length_parameterize<T: CoordFloat>(
     }
 
     let t_last = ts[last - first];
-    for t in ts.iter_mut() {
+    for t in &mut ts {
         *t = *t / t_last;
     }
     ts
@@ -888,10 +884,11 @@ impl<T: CoordFloat> VectorTraits<T> for Coord<T> {
     }
 }
 
+#[expect(clippy::expect_used, clippy::print_stdout)]
 #[cfg(test)]
 mod tests {
     use crate::{BezierCurve, BezierSegment, BezierString, Error};
-    use geo::{Distance, Euclidean};
+    use geo::{Distance as _, Euclidean};
     use geo_types::{Coord, LineString, coord, line_string};
 
     fn actual_max_dist_between_bezier_and_line_string<T: geo_types::CoordFloat>(
@@ -1032,7 +1029,7 @@ mod tests {
     }
 
     fn debug_print_line_string<T: geo_types::CoordFloat>(line_string: &LineString<T>) {
-        for c in line_string.0.iter() {
+        for c in &line_string.0 {
             print!("{};", debug_print_point(c));
         }
         println!(" ");
@@ -1059,7 +1056,7 @@ mod tests {
                         debug_print_point(&bc.handle1),
                         debug_print_point(&bc.handle2),
                         debug_print_point(&bc.end)
-                    )
+                    );
                 }
                 BezierSegment::Line(line) => {
                     if i == 0 {
@@ -1070,7 +1067,7 @@ mod tests {
             }
         }
         println!(";");
-        println!("{:?}", bezier_string.num_points())
+        println!("{:?}", bezier_string.num_points());
     }
 
     #[test]
@@ -1083,7 +1080,7 @@ mod tests {
         let line_string = curve.to_line_string(0.1).expect("Approximation failed");
 
         let max_dist = actual_max_dist_between_bezier_and_line_string(&curve, &line_string, 1);
-        println!("{:?}", max_dist);
+        println!("{max_dist:?}");
 
         assert!(max_dist < 0.1);
     }
@@ -1161,9 +1158,9 @@ mod tests {
         let line_string = curve.to_line_string(0.1).expect("Approximation failed");
 
         let mut max_error = 0.;
-        for segment in curve.0.iter() {
+        for segment in &curve.0 {
             match segment {
-                BezierSegment::Line(_) => continue,
+                BezierSegment::Line(_) => (),
                 BezierSegment::Bezier(bc) => {
                     // find the start and end index in line_string for bc
                     // find the max error
@@ -1171,9 +1168,9 @@ mod tests {
                     // check against 0.1
                     let max_dist =
                         actual_max_dist_between_bezier_and_line_string(bc, &line_string, 1);
-                    println!("{:?}", max_dist);
+                    println!("{max_dist:?}");
                     if max_dist > max_error {
-                        max_error = max_dist
+                        max_error = max_dist;
                     }
                 }
             }
@@ -1255,7 +1252,7 @@ mod tests {
         );
         let curve =
             BezierString::from_line_string(segment, 0.1).expect("Could not convert to bezier");
-        assert!(curve.num_points() == 2)
+        assert!(curve.num_points() == 2);
     }
 
     #[test]
@@ -1265,15 +1262,15 @@ mod tests {
             .expect("Could not convert to bezier");
 
         let mut max_error = 0.;
-        for segment in curve.0.iter() {
+        for segment in &curve.0 {
             match segment {
-                BezierSegment::Line(_) => continue,
+                BezierSegment::Line(_) => (),
                 BezierSegment::Bezier(bc) => {
                     let max_dist =
                         actual_max_dist_between_bezier_and_line_string(bc, &line_string, 0);
-                    println!("{:?}", max_dist);
+                    println!("{max_dist:?}");
                     if max_dist > max_error {
-                        max_error = max_dist
+                        max_error = max_dist;
                     }
                 }
             }
