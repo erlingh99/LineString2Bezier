@@ -31,6 +31,7 @@ pub enum Error {
 
 /// Simple struct to represent a cubic bezier curve
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct BezierCurve<T: CoordFloat = f64> {
     /// The start coord for the bezier curve
     pub start: Coord<T>,
@@ -129,6 +130,7 @@ impl<T: CoordFloat> BezierCurve<T> {
 
 /// A `BezierSegment` is either a straight [Line] or a [`BezierCurve`]
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum BezierSegment<T: CoordFloat = f64> {
     /// The segment is a cubic bezier
     Bezier(BezierCurve<T>),
@@ -261,6 +263,7 @@ fn bezier_basis_3<T: CoordFloat>(t: T) -> T {
 
 /// A `BezierString` is simply a vector of [`BezierSegment`]s
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct BezierString<T: CoordFloat = f64>(pub Vec<BezierSegment<T>>);
 
 impl<T: CoordFloat> BezierString<T> {
